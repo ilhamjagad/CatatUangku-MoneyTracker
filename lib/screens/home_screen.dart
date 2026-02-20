@@ -101,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
+                  // ignore: deprecated_member_use
                   color: Colors.purple.withOpacity(0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
@@ -172,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
+                        // ignore: deprecated_member_use
                         color: Colors.grey.withOpacity(0.1),
                         blurRadius: 5,
                         offset: const Offset(0, 2),
@@ -340,6 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
+                                    // ignore: deprecated_member_use
                                     color: Colors.grey.withOpacity(0.08),
                                     blurRadius: 8,
                                     offset: const Offset(0, 2),
@@ -351,6 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
+                                    // ignore: deprecated_member_use
                                     color: (isIncome ? Colors.green : Colors.red).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
@@ -408,6 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         } else if (value == 'delete') {
                                           await _dbHelper.deleteTransaction(t.id!);
                                           _refreshData();
+                                          // ignore: use_build_context_synchronously
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               content: Text('Transaksi "${t.description}" dihapus'),
@@ -443,7 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       );
                     },
