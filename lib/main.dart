@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'screens/main_navigation.dart';
+import 'package:money_tracker/utils/constants.dart';
+import 'package:money_tracker/screens/splash_screen.dart';
+import 'package:money_tracker/screens/login_screen.dart';
+import 'package:money_tracker/screens/register_screen.dart';
+import 'package:money_tracker/screens/main_navigation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize locale data for intl package
   await initializeDateFormatting('id_ID', null);
-  
-  // Set preferred orientations
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-  
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
@@ -24,13 +20,16 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Money Tracker',
+      title: AppConstants.appName,
+      theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const MainNavigation(),
+      initialRoute: '/splash',
+      routes: {
+        '/splash': (context) => const SplashScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const MainNavigation(),
+      },
     );
   }
 }

@@ -1,9 +1,13 @@
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../utils/constants.dart' as constants;
 import '../database/database_helper.dart';
 import '../models/transaction.dart' as models;
+import '../services/auth_service.dart';
 import 'transaction_form_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final AuthService _authService = AuthService();
   late Future<List<models.Transaction>> _transactionsFuture;
 
   double _totalIncome = 0;
@@ -24,6 +29,24 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadTransactions();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh user data when returning from profile
+    if (ModalRoute.of(context)?.isCurrent == true) {
+      _loadUserName();
+    }
+  }
+
+  String _userName = 'User';
+
+  void _loadUserName() {
+    final user = _authService.getCurrentUser();
+    setState(() {
+      _userName = user?.displayName ?? 'User';
+    });
   }
 
   void _loadTransactions() {
@@ -72,29 +95,63 @@ class _HomeScreenState extends State<HomeScreen> {
     final monthLabel = DateFormat.yMMMM('id_ID').format(_selectedMonth);
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: constants.AppColors.background,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: constants.AppColors.primaryGradient,
+          ),
+        ),
         title: const Text(
           'CatatUangku!',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            fontSize: 22,
+            letterSpacing: 0.5,
           ),
         ),
         centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person, color: Colors.white, size: 24),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+              _loadUserName();
+            },
+          ),
+        ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Greeting
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Text(
+                'Halo, $_userName!',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: constants.AppColors.primary,
+                ),
+              ),
+          ),
           // Balance Card
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                colors: [Color(0xFF0D47A1), Color(0xFF1565C0)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -102,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
               boxShadow: [
                 BoxShadow(
                   // ignore: deprecated_member_use
-                  color: Colors.purple.withOpacity(0.3),
+                  color: Color(0xFF0D47A1).withOpacity(0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -130,24 +187,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildSummaryItem(
-                      icon: Icons.arrow_downward,
-                      label: 'Pemasukan',
-                      value: _formatCurrency(_totalIncome),
-                      color: Colors.green[300]!,
+                    SizedBox(
+                      width: 120,
+                      child: _buildSummaryItem(
+                        icon: Icons.arrow_downward,
+                        label: 'Pemasukan',
+                        value: _formatCurrency(_totalIncome),
+                        color: Colors.green[300]!,
+                      ),
                     ),
                     Container(
                       width: 1,
                       height: 40,
                       color: Colors.white24,
                     ),
-                    _buildSummaryItem(
-                      icon: Icons.arrow_upward,
-                      label: 'Pengeluaran',
-                      value: _formatCurrency(_totalExpense),
-                      color: Colors.red[300]!,
+                    SizedBox(
+                      width: 110,
+                      child: _buildSummaryItem(
+                        icon: Icons.arrow_upward,
+                        label: 'Pengeluaran',
+                        value: _formatCurrency(_totalExpense),
+                        color: Colors.red[300]!,
+                      ),
                     ),
                   ],
                 ),
@@ -155,16 +218,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
+          const SizedBox(height: 20),
+
           // Month Navigation
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
                   icon: const Icon(Icons.chevron_left),
                   onPressed: () => _changeMonth(-1),
-                  color: Colors.purple,
+                  color: Color(0xFF0D47A1),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -174,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     boxShadow: [
                       BoxShadow(
                         // ignore: deprecated_member_use
-                        color: Colors.grey.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 5,
                         offset: const Offset(0, 2),
                       ),
@@ -185,14 +250,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.purple,
+                      color: Color(0xFF0D47A1),
                     ),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
                   onPressed: () => _changeMonth(1),
-                  color: Colors.purple,
+                  color: Color(0xFF0D47A1),
                 ),
               ],
             ),
@@ -206,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
               future: _transactionsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Colors.purple));
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFF0D47A1)));
                 }
                 if (snapshot.hasError) {
                   developer.log('HomeScreen: FutureBuilder error: ${snapshot.error}', name: 'Performance', error: snapshot.error);
@@ -265,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 return RefreshIndicator(
                   onRefresh: _refreshData,
-                  color: Colors.purple,
+                  color: Color(0xFF0D47A1),
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: sortedKeys.length,
@@ -274,62 +339,42 @@ class _HomeScreenState extends State<HomeScreen> {
                       final list = grouped[dateKey]!;
 
                       return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Date Header with Summary
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Date Header with Summary
-                          Padding(
-                            padding: const EdgeInsets.only(top: 16, bottom: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          RichText(
+                            text: TextSpan(
                               children: [
-                                RichText(
-                                  text: TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: DateFormat('EEEE', 'id_ID').format(list.first.date),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      const TextSpan(text: ' '),
-                                      TextSpan(
-                                        text: dateKey,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ],
+                                TextSpan(
+                                  text: DateFormat('EEEE', 'id_ID').format(list.first.date),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey[600],
                                   ),
                                 ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '+${_formatCurrency(list.where((t) => t.type == 'income').fold(0, (sum, t) => sum + t.amount))}',
-                                      style: const TextStyle(
-                                        color: Colors.green,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '-${_formatCurrency(list.where((t) => t.type == 'expense').fold(0, (sum, t) => sum + t.amount))}',
-                                      style: const TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                                const TextSpan(text: ' '),
+                                TextSpan(
+                                  text: dateKey,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
                               ],
                             ),
                           ),
+                          // Optimize: Calculate totals once to avoid multiple fold operations
+                          _buildDailySummary(list),
+                        ],
+                      ),
+                    ),
                           // Transaction Cards
                           ...list.map((t) {
                             final isIncome = t.type == 'income';
@@ -342,109 +387,53 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    // ignore: deprecated_member_use
-                                    color: Colors.grey.withOpacity(0.08),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    // ignore: deprecated_member_use
-                                    color: (isIncome ? Colors.green : Colors.red).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-                                    color: isIncome ? Colors.green : Colors.red,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  t.description,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  t.category,
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      (isIncome ? '+' : '-') + formattedAmount,
-                                      style: TextStyle(
-                                        color: isIncome ? Colors.green : Colors.red,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
+                              child: InkWell(
+                                onTap: () => _showTransactionOptions(context, t),
+                                borderRadius: BorderRadius.circular(12),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      // ignore: deprecated_member_use
+                                      color: (isIncome ? Colors.green : Colors.red).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    const SizedBox(width: 8),
-                                    PopupMenuButton<String>(
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(
-                                        Icons.more_vert,
-                                        color: Colors.grey[400],
-                                        size: 20,
-                                      ),
-                                      onSelected: (value) async {
-                                        if (value == 'edit') {
-                                          await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => TransactionFormScreen(
-                                                transaction: t,
-                                                onSave: _refreshData,
-                                              ),
-                                            ),
-                                          );
-                                          _refreshData();
-                                        } else if (value == 'delete') {
-                                          await _dbHelper.deleteTransaction(t.id!);
-                                          _refreshData();
-                                          // ignore: use_build_context_synchronously
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Transaksi "${t.description}" dihapus'),
-                                              backgroundColor: Colors.red,
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.edit, size: 18, color: Colors.blue),
-                                              SizedBox(width: 8),
-                                              Text('Edit'),
-                                            ],
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.delete, size: 18, color: Colors.red),
-                                              SizedBox(width: 8),
-                                              Text('Hapus'),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                                    child: Icon(
+                                      isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+                                      color: isIncome ? Colors.green : Colors.red,
+                                      size: 20,
                                     ),
-                                  ],
+                                  ),
+                                  title: Text(
+                                    t.description,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    t.category,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  trailing: Text(
+                                    (isIncome ? '+' : '-') + formattedAmount,
+                                    style: TextStyle(
+                                      color: isIncome ? Colors.green : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
@@ -459,6 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await Navigator.push(
@@ -470,9 +460,48 @@ class _HomeScreenState extends State<HomeScreen> {
           _refreshData();
         },
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        backgroundColor: Colors.purple,
+        backgroundColor: constants.AppColors.primaryMid,
         child: const Icon(Icons.add, color: Colors.white),
       ),
+    );
+  }
+
+  Widget _buildDailySummary(List<models.Transaction> list) {
+    // Calculate totals once to avoid multiple fold operations
+    double incomeTotal = 0;
+    double expenseTotal = 0;
+    for (var t in list) {
+      if (t.type == 'income') {
+        incomeTotal += t.amount;
+      } else {
+        expenseTotal += t.amount;
+      }
+    }
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (incomeTotal > 0)
+          Text(
+            '+${_formatCurrency(incomeTotal)}',
+            style: const TextStyle(
+              color: Colors.green,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        if (incomeTotal > 0 && expenseTotal > 0)
+          const SizedBox(width: 8),
+        if (expenseTotal > 0)
+          Text(
+            '-${_formatCurrency(expenseTotal)}',
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+      ],
     );
   }
 
@@ -508,6 +537,97 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  void _showTransactionOptions(BuildContext context, models.Transaction t) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                t.description,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.blue),
+                title: const Text('Edit Transaksi'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TransactionFormScreen(
+                        transaction: t,
+                        onSave: _refreshData,
+                      ),
+                    ),
+                  );
+                  _refreshData();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Hapus Transaksi'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  // Show confirmation dialog
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Hapus Transaksi'),
+                      content: Text('Apakah Anda yakin ingin menghapus transaksi "${t.description}"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('Batal'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Hapus'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await _dbHelper.deleteTransaction(t.id!);
+                    _refreshData();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Transaksi "${t.description}" dihapus'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

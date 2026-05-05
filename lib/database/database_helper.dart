@@ -1,265 +1,251 @@
 import 'dart:developer' as developer;
-import 'dart:io' show Platform;
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart' if (dart.library.html) 'package:sqflite_common_ffi_web/sqflite_common_ffi_web.dart' as sqflite_ffi;
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import '../models/transaction.dart' as models;
 import '../models/category.dart' as category_models;
+import '../services/firebase_service.dart';
+import '../services/auth_service.dart';
 
+/// DatabaseHelper yang menggunakan Firebase Firestore untuk sinkronisasi data antar device
 class DatabaseHelper {
   static const String tableName = 'transactions';
   static const String categoryTableName = 'categories';
-  static Database? _database;
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database ??= await _initDatabase();
-    return _database!;
+  // Firebase Service instance
+  final FirebaseService _firebaseService = FirebaseService();
+  final AuthService _authService = AuthService();
+
+  // Current user UID - null jika belum login
+  String? _currentUid;
+
+  /// Set user UID secara manual (dipanggil setelah login)
+  void setCurrentUser(String uid) {
+    _currentUid = uid;
+    developer.log('DB: User UID set to: $uid', name: 'DatabaseHelper');
   }
 
-  Future<Database> _initDatabase() async {
-    try {
-      developer.log('DB: Initializing database...', name: 'DatabaseHelper');
-      
-      final dbPath = await getDatabasesPath();
-      developer.log('DB: Database path: $dbPath', name: 'DatabaseHelper');
-      
-      String path = join(dbPath, 'money_tracker.db');
+  /// Dapatkan user UID saat ini
+  String? get currentUid {
+    if (_currentUid != null) return _currentUid;
 
-      // Only use FFI on desktop platforms
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        sqflite_ffi.sqfliteFfiInit();
-        final factory = sqflite_ffi.databaseFactoryFfi;
-        return factory.openDatabase(
-          path,
-          options: OpenDatabaseOptions(
-            version: 2,
-            onCreate: _createDatabase,
-            onUpgrade: _onUpgradeDatabase,
-          ),
-        );
-      }
-
-      return openDatabase(
-        path,
-        version: 2,
-        onCreate: _createDatabase,
-        onUpgrade: _onUpgradeDatabase,
-      );
-    } catch (e, stackTrace) {
-      developer.log('DB: Error initializing database: $e', name: 'DatabaseHelper', error: e, stackTrace: stackTrace);
-      // Return an in-memory database as fallback to prevent crash
-      return openDatabase(
-        ':memory:',
-        version: 1,
-        onCreate: _createDatabase,
-      );
+    // ✅ Coba ambil langsung dari FirebaseAuth (sudah pasti ada setelah login)
+    final firebaseUser = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      _currentUid = firebaseUser.uid;
+      developer.log('DB: Got UID from FirebaseAuth: $_currentUid', name: 'DatabaseHelper');
+      return _currentUid;
     }
-  }
 
-  Future<void> _onUpgradeDatabase(Database db, int oldVersion, int newVersion) async {
-    // Check if categories table exists
-    final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='$categoryTableName'");
-    if (tables.isEmpty) {
-      await db.execute('''
-        CREATE TABLE $categoryTableName (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          type TEXT NOT NULL,
-          icon TEXT NOT NULL,
-          color INTEGER NOT NULL
-        )
-      ''');
-      await _insertDefaultCategories(db);
+    // Fallback ke AuthService
+    final user = _authService.getCurrentUser();
+    if (user != null) {
+      _currentUid = user.uid;
+      return _currentUid;
     }
+
+    developer.log('DB: No user logged in', name: 'DatabaseHelper');
+    return null;
   }
 
-  Future<void> _createDatabase(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE $tableName (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        amount REAL NOT NULL,
-        category TEXT NOT NULL,
-        type TEXT NOT NULL,
-        date TEXT NOT NULL
-      )
-    ''');
+  // ============ TRANSAKSI - Menggunakan Firebase Firestore ============
 
-    await db.execute('''
-      CREATE TABLE $categoryTableName (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        icon TEXT NOT NULL,
-        color INTEGER NOT NULL
-      )
-    ''');
+  /// Cek apakah user sudah login (untuk menggunakan Firestore)
+  bool get _isUserLoggedIn => currentUid != null;
 
-    // Insert default categories
-    await _insertDefaultCategories(db);
-  }
-
-  Future<void> _insertDefaultCategories(Database db) async {
-    final defaultCategories = [
-      {'name': 'Gaji', 'type': 'income', 'icon': 'account_balance_wallet', 'color': 0xFF4CAF50},
-      {'name': 'Investasi', 'type': 'income', 'icon': 'trending_up', 'color': 0xFF8BC34A},
-      {'name': 'Freelance', 'type': 'income', 'icon': 'laptop', 'color': 0xFF009688},
-      {'name': 'Lainnya', 'type': 'income', 'icon': 'more_horiz', 'color': 0xFF607D8B},
-      {'name': 'Makanan', 'type': 'expense', 'icon': 'restaurant', 'color': 0xFFFF5722},
-      {'name': 'Transportasi', 'type': 'expense', 'icon': 'directions_car', 'color': 0xFF2196F3},
-      {'name': 'Belanja', 'type': 'expense', 'icon': 'shopping_cart', 'color': 0xFFE91E63},
-      {'name': 'Tagihan', 'type': 'expense', 'icon': 'receipt', 'color': 0xFF9C27B0},
-      {'name': 'Hiburan', 'type': 'expense', 'icon': 'movie', 'color': 0xFFFF9800},
-      {'name': 'Kesehatan', 'type': 'expense', 'icon': 'local_hospital', 'color': 0xFFF44336},
-    ];
-
-    for (var cat in defaultCategories) {
-      await db.insert(categoryTableName, cat);
-    }
-  }
-
-  // Insert
+  // Insert transaksi ke Firestore
   Future<int> insertTransaction(models.Transaction transaction) async {
-    final db = await database;
-    return db.insert(tableName, transaction.toMap());
-  }
-
-  // Get all
-  Future<List<models.Transaction>> getAllTransactions() async {
-    developer.log('DB: Fetching all transactions...', name: 'DatabaseHelper');
-    final db = await database;
-    final maps = await db.query(tableName, orderBy: 'date DESC');
-    developer.log('DB: Found ${maps.length} transactions', name: 'DatabaseHelper');
-    return maps.map((m) => models.Transaction.fromMap(m)).toList();
-  }
-
-  // Update
-  Future<int> updateTransaction(models.Transaction transaction) async {
-    final db = await database;
-    return db.update(
-      tableName,
-      transaction.toMap(),
-      where: 'id = ?',
-      whereArgs: [transaction.id],
-    );
-  }
-
-  // Delete
-  Future<int> deleteTransaction(int id) async {
-    final db = await database;
-    return db.delete(tableName, where: 'id = ?', whereArgs: [id]);
-  }
-
-  // Get transactions by month (optimized with SQL WHERE clause)
-  Future<List<models.Transaction>> getTransactionsByMonth(int month, int year) async {
-    developer.log('DB: Fetching transactions for month=$month, year=$year', name: 'DatabaseHelper');
-    final db = await database;
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 0);
-    
-    // Filter directly at SQL level for better performance
-    final maps = await db.query(
-      tableName,
-      where: 'date >= ? AND date <= ?',
-      whereArgs: [start.toIso8601String(), end.toIso8601String()],
-      orderBy: 'date DESC',
-    );
-    developer.log('DB: Found ${maps.length} transactions for the month', name: 'DatabaseHelper');
-    return maps.map((m) => models.Transaction.fromMap(m)).toList();
-  }
-
-  // Get total income & expense (optimized with SQL aggregation)
-  Future<Map<String, double>> getTotalByType(int month, int year) async {
-    developer.log('DB: Computing totals for month=$month, year=$year', name: 'DatabaseHelper');
-    final db = await database;
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 0);
-    
-    final result = await db.rawQuery('''
-      SELECT type, SUM(amount) as total
-      FROM $tableName
-      WHERE date >= ? AND date <= ?
-      GROUP BY type
-    ''', [start.toIso8601String(), end.toIso8601String()]);
-    
-    double income = 0, expense = 0;
-    for (var row in result) {
-      final type = row['type'] as String;
-      final total = (row['total'] as num?)?.toDouble() ?? 0.0;
-      if (type == 'income') {
-        income = total;
-      } else {
-        expense = total;
-      }
+    if (!_isUserLoggedIn) {
+      developer.log('DB: User not logged in, cannot save transaction', name: 'DatabaseHelper');
+      throw Exception('User must be logged in to save transactions');
     }
-    developer.log('DB: Totals - income: $income, expense: $expense', name: 'DatabaseHelper');
-    return {'income': income, 'expense': expense};
+
+    developer.log('DB: Saving transaction to Firestore for user: $currentUid', name: 'DatabaseHelper');
+    final transactionData = {
+      'description': transaction.description,
+      'amount': transaction.amount,
+      'category': transaction.category,
+      'type': transaction.type,
+      'date': transaction.date.toIso8601String(),
+    };
+    final docId = await _firebaseService.saveTransaction(currentUid!, transactionData);
+    developer.log('DB: Transaction saved to Firestore with ID: $docId', name: 'DatabaseHelper');
+    return 1;
   }
 
-  // Get total by category (SQL langsung)
+  // Get all transactions dari Firestore
+  Future<List<models.Transaction>> getAllTransactions() async {
+    if (!_isUserLoggedIn) {
+      developer.log('DB: User not logged in, returning empty list', name: 'DatabaseHelper');
+      return [];
+    }
+
+    developer.log('DB: Fetching all transactions from Firestore for user: $currentUid', name: 'DatabaseHelper');
+    final maps = await _firebaseService.getTransactions(currentUid!);
+    developer.log('DB: Found ${maps.length} transactions from Firestore', name: 'DatabaseHelper');
+    return maps.map((m) => models.Transaction.fromMap(m)).toList();
+  }
+
+  // Update transaksi di Firestore
+  Future<int> updateTransaction(models.Transaction transaction) async {
+    if (!_isUserLoggedIn || transaction.id == null) {
+      developer.log('DB: Cannot update transaction - user not logged in or no ID', name: 'DatabaseHelper');
+      throw Exception('User must be logged in to update transactions');
+    }
+
+    developer.log('DB: Updating transaction in Firestore: ${transaction.id}', name: 'DatabaseHelper');
+    final transactionData = {
+      'description': transaction.description,
+      'amount': transaction.amount,
+      'category': transaction.category,
+      'type': transaction.type,
+      'date': transaction.date.toIso8601String(),
+    };
+    await _firebaseService.updateTransaction(currentUid!, transaction.id.toString(), transactionData);
+    return 1;
+  }
+
+  // Delete transaksi dari Firestore
+  Future<int> deleteTransaction(dynamic id) async {
+    if (!_isUserLoggedIn) {
+      developer.log('DB: Cannot delete transaction - user not logged in', name: 'DatabaseHelper');
+      throw Exception('User must be logged in to delete transactions');
+    }
+
+    developer.log('DB: Deleting transaction from Firestore: $id', name: 'DatabaseHelper');
+    await _firebaseService.deleteTransaction(currentUid!, id.toString());
+    return 1;
+  }
+
+  // Get transactions by month dari Firestore
+  Future<List<models.Transaction>> getTransactionsByMonth(int month, int year) async {
+    if (!_isUserLoggedIn) {
+      developer.log('DB: User not logged in, returning empty list', name: 'DatabaseHelper');
+      return [];
+    }
+
+    developer.log('DB: Fetching transactions for month=$month, year=$year from Firestore', name: 'DatabaseHelper');
+    final maps = await _firebaseService.getTransactionsByMonth(currentUid!, month, year);
+    developer.log('DB: Found ${maps.length} transactions from Firestore', name: 'DatabaseHelper');
+    return maps.map((m) => models.Transaction.fromMap(m)).toList();
+  }
+
+  // Get total income & expense dari Firestore
+  Future<Map<String, double>> getTotalByType(int month, int year) async {
+    if (!_isUserLoggedIn) {
+      developer.log('DB: User not logged in, returning zero totals', name: 'DatabaseHelper');
+      return {'income': 0.0, 'expense': 0.0};
+    }
+
+    developer.log('DB: Computing totals from Firestore for user: $currentUid', name: 'DatabaseHelper');
+    final totals = await _firebaseService.getTotalByType(currentUid!, month, year);
+    developer.log('DB: Totals from Firestore - income: ${totals['income']}, expense: ${totals['expense']}', name: 'DatabaseHelper');
+    return totals;
+  }
+
+  // Get total by category dari Firestore
   Future<Map<String, double>> getTotalByCategory(int month, int year) async {
-    final db = await database;
-    final start = DateTime(year, month, 1);
-    final end = DateTime(year, month + 1, 0);
+    if (!_isUserLoggedIn) {
+      return {};
+    }
 
-    final result = await db.rawQuery('''
-      SELECT category, SUM(amount) as total
-      FROM $tableName
-      WHERE date BETWEEN ? AND ?
-      GROUP BY category
-    ''', [start.toIso8601String(), end.toIso8601String()]);
-
+    final transactions = await _firebaseService.getTransactionsByMonth(currentUid!, month, year);
     final Map<String, double> totals = {};
-    for (var row in result) {
-      final category = row['category'] as String;
-      final total = (row['total'] as num?)?.toDouble() ?? 0.0;
-      totals[category] = total;
+    for (var transaction in transactions) {
+      final category = transaction['category'] as String;
+      final amount = (transaction['amount'] is num)
+          ? (transaction['amount'] as num).toDouble()
+          : double.tryParse(transaction['amount'].toString()) ?? 0.0;
+      totals[category] = (totals[category] ?? 0) + amount;
     }
     return totals;
   }
 
-  // ============ CATEGORY CRUD ============
+  // ============ KATEGORI - Menggunakan Firebase Firestore ============
 
-  // Insert category
+  // Insert kategori ke Firestore
   Future<int> insertCategory(category_models.Category category) async {
-    final db = await database;
-    return db.insert(categoryTableName, category.toMap());
+    if (!_isUserLoggedIn) {
+      throw Exception('User must be logged in to save categories');
+    }
+
+    developer.log('DB: Saving category to Firestore for user: $currentUid', name: 'DatabaseHelper');
+    final categoryData = {
+      'name': category.name,
+      'type': category.type,
+      'icon': category.icon,
+      'color': category.color,
+    };
+    final docId = await _firebaseService.saveCategory(currentUid!, categoryData);
+    developer.log('DB: Category saved to Firestore with ID: $docId', name: 'DatabaseHelper');
+    return 1;
   }
 
-  // Get all categories
+  // Get all categories dari Firestore
   Future<List<category_models.Category>> getAllCategories() async {
-    final db = await database;
-    final maps = await db.query(categoryTableName, orderBy: 'type ASC, name ASC');
-    return maps.map((m) => category_models.Category.fromMap(m)).toList();
+    if (!_isUserLoggedIn) {
+      developer.log('DB: User not logged in, returning default categories', name: 'DatabaseHelper');
+      return _getDefaultCategories();
+    }
+
+    try {
+      developer.log('DB: Fetching categories from Firestore for user: $currentUid', name: 'DatabaseHelper');
+      final maps = await _firebaseService.getCategories(currentUid!);
+      if (maps.isEmpty) {
+        return _getDefaultCategories();
+      }
+      return maps.map((m) => category_models.Category.fromMap(m)).toList();
+    } catch (e) {
+      developer.log('DB: Error fetching categories: $e', name: 'DatabaseHelper');
+      return _getDefaultCategories();
+    }
   }
 
   // Get categories by type
   Future<List<category_models.Category>> getCategoriesByType(String type) async {
-    final db = await database;
-    final maps = await db.query(
-      categoryTableName,
-      where: 'type = ?',
-      whereArgs: [type],
-      orderBy: 'name ASC',
-    );
-    return maps.map((m) => category_models.Category.fromMap(m)).toList();
+    final allCategories = await getAllCategories();
+    return allCategories.where((c) => c.type == type).toList();
   }
 
-  // Update category
+  // Update kategori di Firestore
   Future<int> updateCategory(category_models.Category category) async {
-    final db = await database;
-    return db.update(
-      categoryTableName,
-      category.toMap(),
-      where: 'id = ?',
-      whereArgs: [category.id],
-    );
+    if (!_isUserLoggedIn || category.id == null) {
+      throw Exception('User must be logged in to update categories');
+    }
+
+    developer.log('DB: Updating category in Firestore: ${category.id}', name: 'DatabaseHelper');
+    final categoryData = {
+      'name': category.name,
+      'type': category.type,
+      'icon': category.icon,
+      'color': category.color,
+    };
+    await _firebaseService.updateCategory(currentUid!, category.id.toString(), categoryData);
+    return 1;
   }
 
-  // Delete category
-  Future<int> deleteCategory(int id) async {
-    final db = await database;
-    return db.delete(categoryTableName, where: 'id = ?', whereArgs: [id]);
+  // Delete kategori dari Firestore
+  Future<int> deleteCategory(dynamic id) async {
+    if (!_isUserLoggedIn) {
+      throw Exception('User must be logged in to delete categories');
+    }
+
+    developer.log('DB: Deleting category from Firestore: $id', name: 'DatabaseHelper');
+    await _firebaseService.deleteCategory(currentUid!, id.toString());
+    return 1;
+  }
+
+  // Default categories
+  List<category_models.Category> _getDefaultCategories() {
+    return [
+      category_models.Category(id: 1, name: 'Gaji', type: 'income', icon: 'account_balance_wallet', color: 0xFF4CAF50),
+      category_models.Category(id: 2, name: 'Investasi', type: 'income', icon: 'trending_up', color: 0xFF8BC34A),
+      category_models.Category(id: 3, name: 'Freelance', type: 'income', icon: 'laptop', color: 0xFF009688),
+      category_models.Category(id: 4, name: 'Lainnya', type: 'income', icon: 'more_horiz', color: 0xFF607D8B),
+      category_models.Category(id: 5, name: 'Makanan', type: 'expense', icon: 'restaurant', color: 0xFFFF5722),
+      category_models.Category(id: 6, name: 'Transportasi', type: 'expense', icon: 'directions_car', color: 0xFF2196F3),
+      category_models.Category(id: 7, name: 'Belanja', type: 'expense', icon: 'shopping_cart', color: 0xFFE91E63),
+      category_models.Category(id: 8, name: 'Tagihan', type: 'expense', icon: 'receipt', color: 0xFF9C27B0),
+      category_models.Category(id: 9, name: 'Hiburan', type: 'expense', icon: 'movie', color: 0xFFFF9800),
+      category_models.Category(id: 10, name: 'Kesehatan', type: 'expense', icon: 'local_hospital', color: 0xFFF44336),
+    ];
   }
 }

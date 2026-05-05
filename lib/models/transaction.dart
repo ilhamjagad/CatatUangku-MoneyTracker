@@ -2,7 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class Transaction {
-  final int? id;
+  // ID bisa int (SQLite) atau String (Firestore)
+  final dynamic id;
   final String description;
   final double amount;
   final String category;
@@ -31,7 +32,12 @@ class Transaction {
 
   factory Transaction.fromMap(Map<String, dynamic> map) {
     return Transaction(
-      id: map['id'] is int ? map['id'] as int : null,
+      // Handle both int (SQLite) and String (Firestore) ID
+      id: map['id'] is int 
+          ? map['id'] as int 
+          : map['id'] is String 
+              ? map['id'] as String 
+              : null,
       description: map['description']?.toString() ?? '',
       amount: (map['amount'] is int)
           ? (map['amount'] as int).toDouble()

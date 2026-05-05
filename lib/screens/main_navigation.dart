@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'graph_screen.dart';
 import 'category_screen.dart';
@@ -13,14 +14,12 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
-  final PageController _pageController = PageController();
+  late PageController _pageController;
 
-  void _onItemTapped(int index) {
-    _pageController.animateToPage(
-      index,
-      duration: Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
   }
 
   @override
@@ -29,34 +28,64 @@ class _MainNavigationState extends State<MainNavigation> {
     super.dispose();
   }
 
+  void _onItemTapped(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: PageView(
         controller: _pageController,
+        physics: const ClampingScrollPhysics(),
         onPageChanged: (index) {
           setState(() => _selectedIndex = index);
         },
-        children: [
-          const HomeScreen(),
-          const GraphScreen(),
-          const CategoryScreen(),
+        children: const [
+          HomeScreen(),
+          GraphScreen(),
+          CategoryScreen(),
         ],
       ),
       bottomNavigationBar: CurvedNavigationBar(
-        backgroundColor: Colors.white,
-        color: Colors.purple,
-        animationDuration: const Duration(milliseconds: 400),
-        height: 65,
-        items: [
-          Icon(Icons.home, size: 30, color: Colors.white),
-          Icon(Icons.bar_chart, size: 30, color: Colors.white),
-          Icon(Icons.category, size: 30, color: Colors.white),
-        ],
+        backgroundColor: AppColors.background,
+        color: AppColors.primaryDark,
+        buttonBackgroundColor: AppColors.primaryMid,
+        height: 75,
         index: _selectedIndex,
         onTap: _onItemTapped,
+        animationDuration: const Duration(milliseconds: 200),
+        items: const [
+          Icon(Icons.home, color: Colors.white),
+          Icon(Icons.bar_chart, color: Colors.white),
+          Icon(Icons.category, color: Colors.white),
+        ],
       ),
     );
+  }
+}
+
+// Keep alive wrapper untuk mempertahankan state screen
+class KeepAliveWrapper extends StatefulWidget {
+  final Widget child;
+
+  const KeepAliveWrapper({super.key, required this.child});
+
+  @override
+  State<KeepAliveWrapper> createState() => _KeepAliveWrapperState();
+}
+
+class _KeepAliveWrapperState extends State<KeepAliveWrapper> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

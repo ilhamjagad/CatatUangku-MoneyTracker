@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import '../models/transaction.dart' as models;
 
-// Modern purple-pink gradient color palette
+// Modern blue gradient color palette
 class AppColors {
-  static const Color primaryStart = Color(0xFF8B5CF6); // Purple
-  static const Color primaryEnd = Color(0xFFEC4899); // Pink
-  static const Color primary = Color(0xFF8B5CF6); // Purple as main primary
+  static const Color primaryStart = Color(0xFF0D47A1); // Dark Blue
+  static const Color primaryEnd = Color(0xFF1565C0); // Blue
+  static const Color primary = Color(0xFF1565C0); // Blue as main primary
   static const Color income = Color(0xFF10B981); // Emerald green
   static const Color expense = Color(0xFFEF4444); // Modern red
-  static const Color background = Color(0xFFFDF4FF); // Light pink
+  static const Color background = Color(0xFFF0F7FF); // Light blue
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFFCE7F3); // Light pink
-  static const Color textPrimary = Color(0xFF1F2937); // Dark grey
-  static const Color textSecondary = Color(0xFF6B7280); // Medium grey
-  static const Color textMuted = Color(0xFF9CA3AF);
-  static const Color border = Color(0xFF8B5CF6); // Will be used with opacity in places
-  static const Color shadow = Color(0xFF0F172A);
+  static const Color surfaceVariant = Color(0xFFE3F2FD); // Very light blue
+  static const Color textPrimary = Color(0xFF0D47A1); // Dark blue
+  static const Color textSecondary = Color(0xFF1565C0); // Blue
+  static const Color textMuted = Color(0xFF64B5F6); // Light blue
+  static const Color border = Color(0xFF1565C0); // Will be used with opacity in places
+  static const Color shadow = Color(0xFF0D47A1);
 
   // Helper for gradient
   static LinearGradient get primaryGradient {
@@ -33,6 +34,87 @@ class AppColors {
 String formatCurrency(double amount) {
   final formatter = NumberFormat("#,##0", "id_ID");
   return formatter.format(amount);
+}
+
+// Fungsi manual untuk format angka dengan titik
+String _formatWithDots(String number) {
+  // Balik angka, tambahkan titik setiap 3 karakter, lalu balik kembali
+  String reversed = number.split('').reversed.join();
+  String withDots = reversed.replaceAllMapped(
+    RegExp(r'.{3}'),
+    (match) => '${match.group(0)}.'
+  );
+  // Hapus titik di akhir jika ada
+  if (withDots.endsWith('.')) {
+    withDots = withDots.substring(0, withDots.length - 1);
+  }
+  // Balik kembali ke normal
+  return withDots.split('').reversed.join();
+}
+
+// Custom formatter untuk titik pemisah ribuan
+class _ThousandsSeparatorFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    final String text = newValue.text;
+    
+    // Cek jika ada titik desimal (hanya boleh satu di akhir)
+    final int dotCount = '.'.allMatches(text).length;
+    
+    String integerPart;
+    String? decimalPart;
+    
+    if (dotCount > 1) {
+      // Ada multiple dots - kemungkinan besar dari ribuan separator
+      // Hapus semua titik dulu, lalu format ulang
+      String cleanText = text.replaceAll('.', '');
+      integerPart = cleanText;
+      decimalPart = null;
+    } else if (dotCount == 1) {
+      // Pisahkan bagian integer dan desimal
+      final List<String> parts = text.split('.');
+      integerPart = parts[0];
+      decimalPart = parts.length > 1 ? parts[1] : null;
+      
+      // Jika decimal part ada dan lebih dari 3 digit, kemungkinan ribuan separator
+      if (decimalPart != null && decimalPart.length > 3) {
+        // Kemungkinan ribuan separator, gabungkan kembali
+        integerPart = integerPart + decimalPart;
+        decimalPart = null;
+      }
+    } else {
+      integerPart = text;
+      decimalPart = null;
+    }
+
+    // Hapus semua karakter non-angka dari bagian integer
+    integerPart = integerPart.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (integerPart.isEmpty) {
+      return newValue;
+    }
+
+    // Format bagian integer dengan titik pemisah ribuan
+    final String formattedInteger = _formatWithDots(integerPart);
+
+    // Gabungkan kembali dengan bagian desimal jika ada
+    String finalText = formattedInteger;
+    if (decimalPart != null && decimalPart.isNotEmpty) {
+      finalText += '.' + decimalPart;
+    }
+
+    return TextEditingValue(
+      text: finalText,
+      selection: TextSelection.collapsed(offset: finalText.length),
+    );
+  }
 }
 
 class TransactionFormScreen extends StatefulWidget {
@@ -69,11 +151,17 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       text: widget.transaction?.description ?? '',
     );
     _amountController = TextEditingController(
-      text: widget.transaction?.amount.toString() ?? '',
+      text: widget.transaction != null ? _formatAmountForEditing(widget.transaction!.amount) : '',
     );
     _selectedDate = widget.transaction?.date ?? DateTime.now();
     _selectedType = widget.transaction?.type ?? 'expense';
     _selectedCategory = widget.transaction?.category ?? (_selectedType == 'expense' ? 'Lainnya' : 'Gaji');
+  }
+
+  // Helper untuk format amount saat editing
+  String _formatAmountForEditing(double amount) {
+    final int amountInt = amount.toInt();
+    return _formatWithDots(amountInt.toString());
   }
 
   @override
@@ -92,14 +180,14 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Color(0xFF8B5CF6),
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF1565C0),
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Colors.black,
             ),
-            datePickerTheme: DatePickerThemeData(
-              headerBackgroundColor: Color(0xFF8B5CF6),
+            datePickerTheme: const DatePickerThemeData(
+              headerBackgroundColor: Color(0xFF1565C0),
               headerForegroundColor: Colors.white,
             ),
           ),
@@ -131,7 +219,9 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     }
 
     try {
-      final amount = double.parse(_amountController.text);
+      // Hapus titik pemisah ribuan sebelum parsing
+      final String cleanAmount = _amountController.text.replaceAll('.', '');
+      final amount = double.parse(cleanAmount);
       
       final transaction = models.Transaction(
         id: widget.transaction?.id,
@@ -193,43 +283,50 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.close, color: AppColors.textPrimary),
+          icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           widget.transaction == null ? 'Tambah Transaksi' : 'Edit Transaksi',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+            color: Colors.white,
             fontSize: 20,
           ),
         ),
-        centerTitle: false,
-        shadowColor: AppColors.shadow.withOpacity(0.05),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // Type selector (modern toggle with gradient)
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadow.withOpacity(0.04),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              // Type selector (modern toggle with gradient)
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.shadow.withOpacity(0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
                 children: [
                   Expanded(
                     child: GestureDetector(
@@ -364,6 +461,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                   TextField(
                     controller: _amountController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      _ThousandsSeparatorFormatter(),
+                    ],
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 16,
@@ -394,7 +495,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
 
                   // Category dropdown
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedCategory,
+                    value: _selectedCategory,
                     items: _categories[_selectedType]!.map((category) {
                       return DropdownMenuItem(
                         value: category,
@@ -510,6 +611,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

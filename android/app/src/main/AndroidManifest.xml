@@ -1,7 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for internet -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Required for storing database files -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Required for picking images on Android 13+ -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     
     <application
         android:label="CatatUangku!"

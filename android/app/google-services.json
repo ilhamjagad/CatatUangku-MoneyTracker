@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "470392739492",
+    "project_id": "catatuangku-18bf5",
+    "storage_bucket": "catatuangku-18bf5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:470392739492:android:5befa9ad964a297f553831",
+        "android_client_info": {
+          "package_name": "com.jagadtech.catatuangku"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOhY0krema1uABx1rTreca4O-E7M6LtX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
