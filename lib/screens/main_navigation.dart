@@ -46,9 +46,9 @@ class _MainNavigationState extends State<MainNavigation> {
           setState(() => _selectedIndex = index);
         },
         children: const [
-          HomeScreen(),
-          GraphScreen(),
-          CategoryScreen(),
+          KeepAliveWrapper(child: HomeScreen()),
+          KeepAliveWrapper(child: GraphScreen()),
+          KeepAliveWrapper(child: CategoryScreen()),
         ],
       ),
       bottomNavigationBar: CurvedNavigationBar(
